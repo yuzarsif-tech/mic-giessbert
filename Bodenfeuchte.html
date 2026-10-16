@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bodenfeuchte messen</title>
+<style>
+:root{
+  --bg:#f4f6f9; --card:#fff; --ink:#14233a; --muted:#5b6b80; --line:#d9e0ea;
+  --sens:#0e8fb3; --ok:#22c55e; --warn:#f5b400; --err:#d64545; --code:#0f172a; --code-ink:#e2e8f0;
+}
+html:has(#t-dark:checked){
+  --bg:#0f1520; --card:#18212f; --ink:#e6edf6; --muted:#9aa8bb; --line:#2a3647; --code:#0b1220;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:24px 16px 48px}
+.wrap{max-width:1000px;margin:0 auto}
+
+.lang-in{position:absolute;opacity:0;pointer-events:none}
+.tr{display:none}
+#l-tr:checked ~ .wrap .tr{display:revert}
+#l-tr:checked ~ .wrap .de{display:none}
+.switch{float:right;display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--card);margin-top:4px}
+.switch + .switch{margin-right:8px}
+.switch label{padding:5px 14px;font-size:13px;font-weight:700;cursor:pointer;color:var(--muted)}
+#l-de:checked ~ .wrap label[for=l-de], #l-tr:checked ~ .wrap label[for=l-tr],
+#t-light:checked ~ .wrap label[for=t-light], #t-dark:checked ~ .wrap label[for=t-dark]{background:var(--ink);color:var(--bg)}
+
+a.back{display:inline-block;color:var(--sens);text-decoration:none;font-weight:600;font-size:14px;margin-bottom:10px}
+h1{font-size:26px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 20px}
+h2{font-size:18px;margin:0 0 4px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:16px}
+.card > .q{color:var(--muted);font-size:13.5px;margin:0 0 12px}
+
+/* Signalweg */
+.chain{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap}
+.chain .box{flex:1;min-width:120px;border:1px solid var(--line);border-top:4px solid var(--sens);border-radius:10px;padding:8px 10px;font-size:13px}
+.chain .box b{display:block;font-size:13.5px;margin-bottom:2px}
+.chain .box span{color:var(--muted)}
+.chain i{align-self:center;color:var(--muted);font-style:normal;font-size:20px}
+
+/* Simulator */
+.sim{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.sim label.row{display:flex;align-items:center;gap:8px;font-size:14px;margin:8px 0}
+.sim input[type=range]{width:100%}
+.readouts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.ro{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.ro small{display:block;color:var(--muted);font-size:12px}
+.ro b{font:700 20px ui-monospace,Menlo,monospace}
+.state{grid-column:1/-1;border-radius:8px;padding:10px 12px;font-weight:700;color:#fff;text-align:center}
+.bar{height:10px;border-radius:5px;background:var(--line);overflow:hidden;margin-top:6px}
+.bar > div{height:100%;background:var(--sens);width:0}
+.soilpic{height:46px;border-radius:8px;margin:6px 0 4px;border:1px solid var(--line)}
+
+/* Teilschritte */
+details{border:1px solid var(--line);border-radius:10px;margin:0 0 8px}
+summary{cursor:pointer;padding:10px 12px;font-weight:700;list-style:none;display:flex;gap:10px;align-items:baseline}
+summary::-webkit-details-marker{display:none}
+summary .n{color:var(--sens);font:700 13px ui-monospace,Menlo,monospace}
+summary::after{content:"+";margin-left:auto;color:var(--muted);font-weight:400}
+details[open] summary::after{content:"–"}
+.body{padding:0 12px 12px;font-size:14px}
+.done{margin-top:8px;font-size:13px;border-left:3px solid var(--ok);padding:4px 10px;color:var(--muted)}
+.done b{color:var(--ink)}
+
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+code{font:13px ui-monospace,Menlo,monospace;background:color-mix(in srgb,var(--sens) 12%,transparent);padding:1px 5px;border-radius:4px}
+pre{background:var(--code);color:var(--code-ink);border-radius:10px;padding:12px 14px;overflow:auto;font:12.5px/1.5 ui-monospace,Menlo,monospace;margin:8px 0 0}
+pre .c{color:#7dd3fc}
+.check{border-left:5px solid var(--warn)}
+.check ul{margin:6px 0 0;padding-left:20px}
+
+@media (max-width:760px){ .sim{grid-template-columns:1fr} .chain i{display:none} }
+</style>
+</head>
+<body>
+<input class="lang-in" type="radio" name="lang" id="l-de" checked>
+<input class="lang-in" type="radio" name="lang" id="l-tr">
+<input class="lang-in" type="radio" name="theme" id="t-light" checked>
+<input class="lang-in" type="radio" name="theme" id="t-dark">
+<div class="wrap">
+  <div class="switch"><label for="l-de">DE</label><label for="l-tr">TR</label></div>
+  <div class="switch"><label for="t-light" title="Hell">☀</label><label for="t-dark" title="Dunkel">☾</label></div>
+  <a class="back" href="Entwurf.html" data-keep><span class="de">← Zurück zum Ablauf</span><span class="tr" lang="tr">← Akışa dön</span></a>
+  <h1><span class="de">Schritt 1 · Bodenfeuchte messen</span><span class="tr" lang="tr">Adım 1 · Toprak nemini ölçmek</span></h1>
+  <p class="sub">
+    <span class="de">Feature A „Bedarf erkennen“. Ziel: Aus der Erde wird eine verlässliche Zahl in Prozent – oder eine klare Fehlermeldung.</span>
+    <span class="tr" lang="tr">Feature A „Bedarf erkennen“. Hedef: topraktan güvenilir bir yüzde değeri – ya da net bir hata mesajı.</span>
+  </p>
+
+  <!-- Signalweg -->
+  <section class="card">
+    <h2><span class="de">Der Signalweg</span><span class="tr" lang="tr">Sinyalin yolu</span></h2>
+    <p class="q"><span class="de">Was passiert zwischen nasser Erde und der Entscheidung „gießen“?</span><span class="tr" lang="tr">Islak toprak ile "sula" kararı arasında ne oluyor?</span></p>
+    <div class="chain">
+      <div class="box"><b><span class="de">Wasser in der Erde</span><span class="tr" lang="tr">Topraktaki su</span></b><span class="de">Mehr Wasser = höhere Dielektrizitätszahl (Wasser ≈ 80, Luft ≈ 1)</span><span class="tr" lang="tr">Daha çok su = daha yüksek dielektrik sabiti (su ≈ 80, hava ≈ 1)</span></div>
+      <i>→</i>
+      <div class="box"><b><span class="de">Sensor = Kondensator</span><span class="tr" lang="tr">Sensör = kondansatör</span></b><span class="de">Die Leiterbahnen im Stab bilden mit der Erde eine Kapazität</span><span class="tr" lang="tr">Çubuktaki iletken yollar toprakla birlikte bir kapasite oluşturur</span></div>
+      <i>→</i>
+      <div class="box"><b><span class="de">Spannung (V)</span><span class="tr" lang="tr">Voltaj (V)</span></b><span class="de">Nass → niedrige Spannung, trocken → hohe Spannung</span><span class="tr" lang="tr">Islak → düşük voltaj, kuru → yüksek voltaj</span></div>
+      <i>→</i>
+      <div class="box"><b>ADC (0–4095)</b><span class="de">Der ESP32-C3 macht aus der Spannung eine 12-Bit-Zahl</span><span class="tr" lang="tr">ESP32-C3 voltajı 12 bitlik bir sayıya çevirir</span></div>
+      <i>→</i>
+      <div class="box"><b><span class="de">Prozent</span><span class="tr" lang="tr">Yüzde</span></b><span class="de">Über eure Kalibrierwerte trocken/nass</span><span class="tr" lang="tr">Kendi kuru/ıslak kalibrasyon değerlerinizle</span></div>
+      <i>→</i>
+      <div class="box"><b><span class="de">Entscheidung</span><span class="tr" lang="tr">Karar</span></b><span class="de">trocken / ok / Sensorfehler</span><span class="tr" lang="tr">kuru / tamam / sensör hatası</span></div>
+    </div>
+  </section>
+
+  <!-- Simulator -->
+  <section class="card">
+    <h2><span class="de">Zum Ausprobieren</span><span class="tr" lang="tr">Kendin dene</span></h2>
+    <p class="q"><span class="de">Simuliert mit Beispielwerten (trocken 2,40 V, nass 1,10 V). Eure echten Werte kommen aus der Kalibrierung (1c).</span><span class="tr" lang="tr">Örnek değerlerle simülasyon (kuru 2,40 V, ıslak 1,10 V). Gerçek değerleriniz kalibrasyondan (1c) gelecek.</span></p>
+    <div class="sim">
+      <div>
+        <label class="row" for="moist"><span class="de">Wie nass ist die Erde?</span><span class="tr" lang="tr">Toprak ne kadar ıslak?</span></label>
+        <input type="range" id="moist" min="0" max="100" value="23">
+        <div class="soilpic" id="soilpic"></div>
+        <label class="row"><input type="checkbox" id="noise" checked> <span class="de">Messrauschen</span><span class="tr" lang="tr">Ölçüm gürültüsü</span></label>
+        <label class="row"><input type="checkbox" id="avg"> <span class="de">Mittelwert über 16 Messungen (1d)</span><span class="tr" lang="tr">16 ölçümün ortalaması (1d)</span></label>
+        <label class="row"><input type="checkbox" id="unplug"> <span class="de">Sensorkabel abziehen (1e)</span><span class="tr" lang="tr">Sensör kablosunu çek (1e)</span></label>
+      </div>
+      <div class="readouts">
+        <div class="ro"><small><span class="de">Spannung am Pin</span><span class="tr" lang="tr">Pindeki voltaj</span></small><b id="v">–</b></div>
+        <div class="ro"><small><span class="de">ADC-Rohwert</span><span class="tr" lang="tr">ADC ham değeri</span></small><b id="raw">–</b></div>
+        <div class="ro" style="grid-column:1/-1"><small><span class="de">Feuchte (kalibriert)</span><span class="tr" lang="tr">Nem (kalibre)</span></small><b id="pct">–</b><div class="bar"><div id="pctbar"></div></div></div>
+        <div class="state" id="state">–</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Teilschritte -->
+  <section class="card">
+    <h2><span class="de">Die Teilschritte</span><span class="tr" lang="tr">Alt adımlar</span></h2>
+    <p class="q"><span class="de">Einer nach dem anderen. Jeder hat ein klares „Fertig, wenn …“.</span><span class="tr" lang="tr">Sırayla. Her birinin net bir "Bitti sayılır, eğer …" kriteri var.</span></p>
+
+    <details open>
+      <summary><span class="n">1a</span><span class="de">Sensor verstehen</span><span class="tr" lang="tr">Sensörü anlamak</span></summary>
+      <div class="body">
+        <span class="de">Ein <b>kapazitiver</b> Sensor hat keine blanken Kontakte in der Erde – die Leiterbahnen sind beschichtet. Eine kleine Schaltung auf dem Sensor (Oszillator + Filter) macht aus der Kapazität eine <b>analoge Spannung</b> am Pin <code>AOUT</code>. Ein <b>resistiver</b> Sensor (zwei blanke Gabeln) misst Strom durch die Erde und korrodiert mit der Zeit – deshalb nehmen wir ihn nicht.</span>
+        <span class="tr" lang="tr"><b>Kapasitif</b> sensörün toprakta çıplak teması yoktur – iletken yollar kaplanmıştır. Sensör üzerindeki küçük devre (osilatör + filtre) kapasiteyi <code>AOUT</code> pininde <b>analog bir voltaja</b> çevirir. <b>Rezistif</b> sensör (iki çıplak çatal) toprağın içinden akım geçirir ve zamanla paslanır – bu yüzden onu kullanmıyoruz.</span>
+        <div class="done"><b><span class="de">Fertig, wenn:</span><span class="tr" lang="tr">Bitti sayılır, eğer:</span></b> <span class="de">ihr wisst, mit welcher Spannung der Sensor läuft und in welchem Bereich AOUT liegt (Datenblatt).</span><span class="tr" lang="tr">sensörün hangi voltajla çalıştığını ve AOUT'un hangi aralıkta olduğunu biliyorsunuz (datasheet).</span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="n">1b</span><span class="de">Anschließen und Rohwert lesen</span><span class="tr" lang="tr">Bağlamak ve ham değeri okumak</span></summary>
+      <div class="body">
+        <table>
+          <tr><th>Sensor</th><th>ESP32-C3</th><th><span class="de">Warum</span><span class="tr" lang="tr">Neden</span></th></tr>
+          <tr><td><code>VCC</code></td><td><code>3V3</code></td><td><span class="de">3,3 V statt 5 V: dann bleibt AOUT sicher im Messbereich des ADC.</span><span class="tr" lang="tr">5 V yerine 3,3 V: böylece AOUT, ADC'nin ölçüm aralığında kalır.</span></td></tr>
+          <tr><td><code>GND</code></td><td><code>GND</code></td><td><span class="de">Gemeinsame Masse</span><span class="tr" lang="tr">Ortak toprak</span></td></tr>
+          <tr><td><code>AOUT</code></td><td><span class="de">ein ADC1-Pin, z. B.</span><span class="tr" lang="tr">bir ADC1 pini, ör.</span> <code>GPIO3</code></td><td><span class="de">ADC1 = GPIO0–4. Strapping-Pins (GPIO2, 8, 9) meiden.</span><span class="tr" lang="tr">ADC1 = GPIO0–4. Strapping pinlerinden (GPIO2, 8, 9) kaçın.</span></td></tr>
+          <tr><td><span class="de">zusätzlich</span><span class="tr" lang="tr">ek olarak</span></td><td><span class="de">100 kΩ von <code>GPIO3</code> nach GND</span><span class="tr" lang="tr"><code>GPIO3</code>'ten GND'ye 100 kΩ</span></td><td><span class="de">Pull-down: Ist das Kabel ab, liest der ADC ≈ 0 statt Zufallswerten → Fehler erkennbar (1e).</span><span class="tr" lang="tr">Pull-down: kablo çıkarsa ADC rastgele değer yerine ≈ 0 okur → hata tespit edilir (1e).</span></td></tr>
+        </table>
+<pre><span class="c">// Arduino-ESP32 – erster Test: Rohwert alle 500 ms ausgeben</span>
+const int PIN_FEUCHTE = 3;          <span class="c">// GPIO3 = ADC1</span>
+
+void setup() {
+  Serial.begin(115200);
+  analogReadResolution(12);         <span class="c">// 0 … 4095</span>
+  analogSetAttenuation(ADC_11db);   <span class="c">// größter Messbereich</span>
+}
+
+void loop() {
+  int raw = analogRead(PIN_FEUCHTE);
+  int mv  = analogReadMilliVolts(PIN_FEUCHTE);
+  Serial.printf("raw=%d  mV=%d\n", raw, mv);
+  delay(500);
+}</pre>
+        <div class="done"><b><span class="de">Fertig, wenn:</span><span class="tr" lang="tr">Bitti sayılır, eğer:</span></b> <span class="de">im seriellen Monitor Werte laufen und sie sich ändern, wenn ihr den Sensor anfasst oder ins Wasser haltet.</span><span class="tr" lang="tr">seri monitörde değerler akıyor ve sensöre dokununca ya da suya sokunca değişiyor.</span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="n">1c</span><span class="de">Kalibrieren: trocken und nass</span><span class="tr" lang="tr">Kalibrasyon: kuru ve ıslak</span></summary>
+      <div class="body">
+        <span class="de">Jeder Sensor ist etwas anders. Deshalb zwei Referenzen messen und notieren: <b>trocken</b> (Sensor an der Luft) und <b>nass</b> (Sensor bis zur Markierung im Wasserglas). Dann linear umrechnen:</span>
+        <span class="tr" lang="tr">Her sensör biraz farklıdır. Bu yüzden iki referans ölçüp not edin: <b>kuru</b> (sensör havada) ve <b>ıslak</b> (sensör işarete kadar su bardağında). Sonra doğrusal çevirin:</span>
+<pre>prozent = (RAW_TROCKEN - raw) * 100 / (RAW_TROCKEN - RAW_NASS)
+prozent = constrain(prozent, 0, 100);   <span class="c">// außerhalb → abschneiden</span></pre>
+        <span class="de">Achtung: Wasser = 100 % ist ein Extrem. Gut gegossene Erde liegt deutlich darunter – den Zielwert findet ihr erst mit echter Erde heraus.</span>
+        <span class="tr" lang="tr">Dikkat: su = %100 bir uç değer. İyi sulanmış toprak bunun epey altında kalır – hedef değeri ancak gerçek toprakla bulursunuz.</span>
+        <div class="done"><b><span class="de">Fertig, wenn:</span><span class="tr" lang="tr">Bitti sayılır, eğer:</span></b> <span class="de">RAW_TROCKEN und RAW_NASS notiert sind und Luft ≈ 0 %, Wasser ≈ 100 % anzeigt.</span><span class="tr" lang="tr">RAW_TROCKEN ve RAW_NASS not edildi; hava ≈ %0, su ≈ %100 gösteriyor.</span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="n">1d</span><span class="de">Filtern: Mittelwert</span><span class="tr" lang="tr">Filtre: ortalama</span></summary>
+      <div class="body">
+        <span class="de">Einzelne ADC-Werte springen (Rauschen). Lösung: mehrere Messungen kurz hintereinander, dann den Mittelwert nehmen. Im Simulator oben „Mittelwert über 16“ an- und ausschalten und vergleichen.</span>
+        <span class="tr" lang="tr">Tek tek ADC değerleri zıplar (gürültü). Çözüm: art arda birkaç ölçüm, sonra ortalaması. Yukarıdaki simülatörde "16 ölçümün ortalaması"nı açıp kapatarak karşılaştır.</span>
+<pre>long sum = 0;
+for (int i = 0; i &lt; 16; i++) { sum += analogRead(PIN_FEUCHTE); delay(5); }
+int raw = sum / 16;</pre>
+        <div class="done"><b><span class="de">Fertig, wenn:</span><span class="tr" lang="tr">Bitti sayılır, eğer:</span></b> <span class="de">der Prozentwert bei ruhendem Sensor nur noch um wenige Prozent schwankt.</span><span class="tr" lang="tr">sensör sabitken yüzde değeri sadece birkaç puan oynuyor.</span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="n">1e</span><span class="de">Fehler erkennen</span><span class="tr" lang="tr">Hatayı tespit etmek</span></summary>
+      <div class="body">
+        <span class="de">Ein unplausibler Wert ist <b>kein</b> „trocken“ – sonst pumpt das System bei Kabelbruch endlos. Regel: Liegt <code>raw</code> deutlich außerhalb von [RAW_NASS … RAW_TROCKEN] → <b>Sensorfehler</b>, Pumpe bleibt aus, Warnung an.</span>
+        <span class="tr" lang="tr">Saçma bir değer "kuru" <b>değildir</b> – yoksa kablo koptuğunda sistem durmadan pompalar. Kural: <code>raw</code>, [RAW_NASS … RAW_TROCKEN] aralığının belirgin şekilde dışındaysa → <b>sensör hatası</b>, pompa kapalı, uyarı açık.</span>
+<pre>bool sensorOk = raw &gt; RAW_NASS - 200 &amp;&amp; raw &lt; RAW_TROCKEN + 200;</pre>
+        <div class="done"><b><span class="de">Fertig, wenn:</span><span class="tr" lang="tr">Bitti sayılır, eğer:</span></b> <span class="de">Kabel abziehen zuverlässig „Sensorfehler“ ergibt – nicht „trocken“.</span><span class="tr" lang="tr">kabloyu çekmek güvenilir şekilde "kuru" değil "sensör hatası" veriyor.</span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="n">1f</span><span class="de">Entscheiden: Schwelle mit Hysterese</span><span class="tr" lang="tr">Karar: histerezisli eşik</span></summary>
+      <div class="body">
+        <span class="de">Eine einzige Schwelle (z. B. 30 %) führt am Grenzwert zu ständigem Hin- und Herschalten. Deshalb zwei Schwellen: <b>unter 30 % → „trocken“</b>, erst <b>über 45 % → „genug“</b>. Dazwischen bleibt der letzte Zustand. Die Zahlen sind Startwerte – mit der echten Pflanze anpassen.</span>
+        <span class="tr" lang="tr">Tek bir eşik (ör. %30) sınırda sürekli ileri geri geçişe yol açar. Bu yüzden iki eşik: <b>%30 altı → "kuru"</b>, ancak <b>%45 üstü → "yeterli"</b>. Arada son durum korunur. Sayılar başlangıç değeri – gerçek bitkiyle ayarlanır.</span>
+        <div class="done"><b><span class="de">Fertig, wenn:</span><span class="tr" lang="tr">Bitti sayılır, eğer:</span></b> <span class="de">der Zustand bei langsam steigender Feuchte genau einmal von „trocken“ auf „genug“ wechselt.</span><span class="tr" lang="tr">nem yavaşça artarken durum "kuru"dan "yeterli"ye tam bir kez geçiyor.</span></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="card check">
+    <h2><span class="de">Noch im Datenblatt prüfen</span><span class="tr" lang="tr">Datasheet'te kontrol edilecek</span></h2>
+    <ul>
+      <li><span class="de">ESP32-C3: ADC1-Pins und Messbereich bei maximaler Dämpfung (ca. 0–2,5 V).</span><span class="tr" lang="tr">ESP32-C3: ADC1 pinleri ve maksimum zayıflatmada ölçüm aralığı (yakl. 0–2,5 V).</span></li>
+      <li><span class="de">Euer Board: welche GPIOs herausgeführt sind und welche schon belegt sind (LED, Taster, USB).</span><span class="tr" lang="tr">Sizin kart: hangi GPIO'lar dışarı çıkıyor, hangileri zaten kullanılıyor (LED, buton, USB).</span></li>
+      <li><span class="de">Sensor: läuft er wirklich mit 3,3 V? Manche günstigen Kopien brauchen 5 V (Timer-IC auf dem Sensor ansehen).</span><span class="tr" lang="tr">Sensör: gerçekten 3,3 V ile çalışıyor mu? Bazı ucuz kopyalar 5 V istiyor (sensördeki timer entegresine bakın).</span></li>
+    </ul>
+  </section>
+</div>
+
+<script>
+// Sprache/Theme aus der URL übernehmen (?lang=tr&theme=dark) und an Links weitergeben
+const P = new URLSearchParams(location.search);
+if (P.get('lang') === 'tr') document.getElementById('l-tr').checked = true;
+if (P.get('theme') === 'dark') document.getElementById('t-dark').checked = true;
+document.querySelectorAll('a[data-keep]').forEach(a => a.addEventListener('click', () => {
+  const q = new URLSearchParams();
+  if (document.getElementById('l-tr').checked) q.set('lang', 'tr');
+  if (document.getElementById('t-dark').checked) q.set('theme', 'dark');
+  a.setAttribute('href', a.getAttribute('href').split('?')[0] + (q.toString() ? '?' + q : ''));
+}));
+
+// Simulator mit Beispielwerten
+const V_DRY = 2.40, V_WET = 1.10, V_MAX = 2.5;            // Beispiel, nicht gemessen
+const RAW_DRY = Math.round(V_DRY / V_MAX * 4095), RAW_WET = Math.round(V_WET / V_MAX * 4095);
+const $ = id => document.getElementById(id);
+const tr = () => $('l-tr').checked;
+let dry = true;                                           // Hysterese-Zustand
+
+function sample() {
+  if ($('unplug').checked) return Math.round(Math.random() * 15);   // Pull-down → ≈ 0
+  const m = +$('moist').value;
+  const v = V_DRY - (V_DRY - V_WET) * m / 100;
+  const n = $('noise').checked ? (Math.random() - .5) * 160 : 0;
+  return Math.max(0, Math.min(4095, Math.round(v / V_MAX * 4095 + n)));
+}
+
+function tick() {
+  let raw;
+  if ($('avg').checked) { let s = 0; for (let i = 0; i < 16; i++) s += sample(); raw = Math.round(s / 16); }
+  else raw = sample();
+  const v = raw / 4095 * V_MAX;
+  const ok = raw > RAW_WET - 200 && raw < RAW_DRY + 200;
+  let pct = Math.round((RAW_DRY - raw) * 100 / (RAW_DRY - RAW_WET));
+  pct = Math.max(0, Math.min(100, pct));
+
+  $('v').textContent = v.toFixed(2) + ' V';
+  $('raw').textContent = raw;
+  $('pct').textContent = ok ? pct + ' %' : '–';
+  $('pctbar').style.width = (ok ? pct : 0) + '%';
+
+  const st = $('state');
+  if (!ok) { st.style.background = 'var(--err)'; st.textContent = tr() ? 'Sensör hatası → pompa kapalı, uyarı' : 'Sensorfehler → Pumpe aus, Warnung'; return; }
+  if (pct < 30) dry = true; else if (pct > 45) dry = false;
+  st.style.background = dry ? 'var(--warn)' : 'var(--ok)';
+  st.textContent = dry ? (tr() ? 'Kuru (< %30) → sulama gerekli' : 'Trocken (< 30 %) → gießen nötig')
+                       : (tr() ? 'Yeterli (> %45 olmuştu) → sulama yok' : 'Genug (> 45 % erreicht) → nicht gießen');
+}
+
+function soil() {
+  const m = +$('moist').value / 100;
+  const c = (a, b) => Math.round(a + (b - a) * m);
+  $('soilpic').style.background = `rgb(${c(201,90)},${c(165,58)},${c(124,34)})`;
+}
+$('moist').addEventListener('input', () => { soil(); tick(); });
+soil(); tick(); setInterval(tick, 400);
+</script>
+</body>
+</html>
